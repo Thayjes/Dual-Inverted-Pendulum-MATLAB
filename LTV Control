@@ -1,0 +1,72 @@
+function [x]=LTVControl(T,Q,R,xdash) %xdash is the deviation in the initial condition at T=0
+%xdash=[0.1;0;0;0;0;0;];
+B=[0;0;0;1;0;0];
+h=0.01;
+N=T/h;
+xdash_k=zeros(9,N+1);udash=zeros(N+1,1);
+xdash_k(1:6,1)=xdash;
+global xbar1
+global ubar1
+
+C=DRE(T,Q,R); t=0:0.01:T; x=zeros(9,301); u=zeros(N+1,1);
+for i=1:N
+    udash(i)= (-R\B')*C{i}*(Compute_E(xbar1(:,i)))*xdash;
+    u(i)=ubar1(i)+udash(i);
+    x(:,i)=xbar1(:,i)+xdash_k(:,i);
+%     udash=-*xdash;
+    f1=RHSb1(xdash,R,xbar1(:,i),C{i});
+    f2=RHSb1(xdash+h*f1/2,R,( xbar1(:,i) + xbar1(:,i+1) )/2,( C{i}+C{i+1} )/2 );
+    f3=RHSb1(xdash+h*f2/2,R,( xbar1(:,i) + xbar1(:,i+1) )/2,( C{i}+C{i+1} )/2);
+    f4=RHSb1(xdash+h*f3,R, xbar1(:,i+1),C{i} );
+    xdash= xdash + h*( f1/6 + (f2 + f3)/3 + f4/6 );
+    xdash_k(1:6,i+1)=xdash;
+    xdash_k(7:9,i)=f1(4:6);
+end
+f1=RHSb1(xdash,R,xbar1(:,N+1),C{N+1});
+xdash_k(7:9,N+1)=f1(4:6);
+udash(N+1)= (-R\B')*C{N+1}*(Compute_E(xbar1(:,N+1)))*xdash;
+x(:,N+1)=xbar1(:,N+1)+xdash_k(:,N+1);
+u(N+1)=ubar1(N+1)+udash(N+1);
+end
+%DIFFERENTIAL RICATTI EQUATION USING RK4 METHOD
+function C=DRE(T,Q,R)
+global xbar1
+B=[0;0;0;1;0;0];
+% xbar=[0.0287;
+%     0.0902;
+%     0.1014;
+%    -0.1435;
+%    -3.2873;
+%    -3.3858;
+%     8.2281;
+%    16.7585;
+%    33.8882];
+A=Compute_A(xbar1(:,301));
+E=Compute_E(xbar1(:,301));
+[X,~,~]=care(A,B,Q,R,zeros(6,1),E); %What is xbar1(:,301), should we use the ideal final state?
+h=0.01; N=T/h; C=cell(N+1,1);
+for n=N:-1:1
+    C{n+1}=X;
+    xh=(xbar1(:,n+1)+xbar1(:,n))/2; 
+    f1=RHSDRE(xbar1(:,n+1),X,R,Q);
+    f2=RHSDRE(xh,X-h*f1/2,R,Q);
+    f3=RHSDRE(xh,X-h*f2/2,R,Q);
+    f4=RHSDRE(xbar1(:,n),X-h*f3,R,Q);
+    X= X-h*(f1/6 + (f2+f3)/3 +f4/6);
+end
+C{1}=X;
+end
+%The function evaluation for the Perturbation Equation governing xdash(t)
+function f=RHSb1(xdash,R,xbar,X)
+B=[0;0;0;1;0;0];
+%xdash is defined as the error from the normal trajectory xbar
+%X is the solution of the Differential Ricatti Equation which is used to calculate the gain matrix K
+A=Compute_A(xbar);
+E=Compute_E(xbar);
+f=E\(A*xdash(1:6) -(B*(R\B')*X*E)*xdash(1:6));
+end
+
+
+
+
+    
